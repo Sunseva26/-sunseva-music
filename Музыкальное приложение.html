@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF‑8">
+  <meta name="viewport" content="width=device‑width, initial‑scale=1.0"/>
+  <title>Музыкальное приложение 2.0</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #1b1b1b;
+      margin: 0;
+      padding: 20px;
+      color: white;
+      overflow-x: hidden;
+    }
+    .container, .weather-widget {
+      max-width: 480px;
+      margin: auto;
+      background: rgba(255,255,255,0.05);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+    }
+    button, input[type="text"], select {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 1em;
+      border: none;
+      border-radius: 8px;
+      outline: none;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+    button:hover { background-color: #e64a19; }
+    ul { list-style: none; padding: 0; margin-top: 20px; }
+    li {
+      background: rgba(255,255,255,0.1);
+      margin-bottom: 8px;
+      padding: 12px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #fff;
+    }
+    .delete-icon { color: #f44336; cursor: pointer; }
+    #scorePanel { text-align: center; font-size: 1.2em; }
+    #bonfire { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: -1; }
+    .flame, .flame.game-note {
+      position: absolute;
+      user-select: none;
+      font-size: 24px;
+      opacity: 0;
+      animation: rise 2s linear forwards;
+      cursor: default;
+    }
+    .flame.game-note {
+      cursor: pointer;
+      animation: riseNote 4s linear forwards;
+    }
+    @keyframes rise {
+      0% { transform: translateY(0) scale(1); opacity: 0; }
+      10% { opacity: 1; }
+      100% { transform: translateY(-150px) scale(0.5); opacity: 0; }
+    }
+    @keyframes riseNote {
+      0% { transform: translateY(0) scale(1); opacity: 0.6; }
+      30% { opacity: 1; }
+      100% { transform: translateY(-200px) scale(0.5); opacity: 0; }
+    }
+    .weather-widget { margin-top: 20px; transition: background 0.5s ease; }
+    .weather-widget input, .weather-widget button { width: auto; display: inline-block; }
+    .weather-results { margin-top: 10px; display: flex; align-items: center; }
+    .weather-results img {
+      width: 80px;
+      animation: fadeIn 1s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+    import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js";
+
+    const firebaseConfig = {
+      apiKey: "YOUR_FIREBASE_API_KEY",
+      authDomain: "YOUR_FIREBASE_AUTH_DOMAIN",
+      projectId: "YOUR_FIREBASE_PROJECT_ID",
+      storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_FIREBASE_SENDER_ID",
+      appId: "YOUR_FIREBASE_APP_ID"
+    };
+    const app = initializeApp(firebaseConfig);
+    window.auth = getAuth(app);
+    window.storage = getStorage(app);
+    window.firebaseAPI = { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, ref, uploadBytesResumable, getDownloadURL };
+  </script>
+</head>
+<body>
+  <!-- Авторизация -->
+  <div id="authContainer" class="container">
+    <h2>Вход / Регистрация</h2>
+    <input type="email" id="emailInput" placeholder="Email" />
+    <input type="password" id="passwordInput" placeholder="Пароль" />
+    <button id="signupBtn">Регистрация</button>
+    <button id="loginBtn">Войти</button>
+    <div id="authMessage"></div>
+  </div>
+
+  <!-- Приложение -->
+  <div id="appContainer" style="display:none;">
+    <div class="container">
+      <button id="logoutBtn">Выйти</button>
+      <h1>Музыкальное приложение</h1>
+      <div id="scorePanel">Очки: <span id="score">0</span></div>
+      <select id="playlistSelect"></select>
+      <input type="text" id="newPlaylistInput" placeholder="Новый плейлист" />
+      <button id="createPlBtn">Создать плейлист</button>
+
+      <input type="text" id="songInput" placeholder="Название песни" />
+      <button id="addSongBtn">Добавить песню</button>
+
+      <input type="file" id="fileInput" accept=".mp3" />
+      <button id="uploadMp3Btn">Загрузить MP3</button>
+
+      <button id="startRec">Начать запись</button>
+      <button id="stopRec" disabled>Остановить запись</button>
+      <button id="uploadRec">Загрузить запись</button>
+
+      <input type="text" id="searchInput" placeholder="Поиск..." />
+
+      <ul id="songList"></ul>
+      <div id="message"></div>
+    </div>
+
+    <!-- Виджет погоды -->
+    <div class="weather-widget container">
+      <input type="text" id="cityInput" placeholder="Город (напр. Moscow)" />
+      <button id="getWeatherBtn">Узнать погоду</button>
+      <div id="weatherResults" class="weather-results"></div>
+    </div>
+  </div>
+
+  <div id="bonfire"></div>
+  <audio id="fireSound" autoplay loop src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_49d78f289d.mp3?filename=fireplace-110282.mp3"></audio>
+  <audio id="popSound" preload="auto" src="https://cdn.pixabay.com/download/audio/2022/03/14/audio_3f2f8421f6.mp3?filename=click-pop-110167.mp3"></audio>
+
+  <script>
+    // Авторизация
+    const { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, ref, uploadBytesResumable, getDownloadURL } = window.firebaseAPI;
+    let currentUID, playlists = {};
+
+    document.getElementById('signupBtn').onclick = () => {
+      const e = document.getElementById('emailInput').value, p = document.getElementById('passwordInput').value;
+      createUserWithEmailAndPassword(auth,e,p).catch(x=>alert(x.message));
+    };
+    document.getElementById('loginBtn').onclick = () => {
+      const e = document.getElementById('emailInput').value, p = document.getElementById('passwordInput').value;
+      signInWithEmailAndPassword(auth,e,p).catch(x=>alert(x.message));
+    };
+    document.getElementById('logoutBtn').onclick = () => signOut(auth);
+
+    onAuthStateChanged(auth, user => {
+      if(user) {
+        currentUID = user.uid;
+        document.getElementById('authContainer').style.display='none';
+        document.getElementById('appContainer').style.display='block';
+        loadUserPlaylists();
+        initApp();
+      } else {
+        document.getElementById('authContainer').style.display='block';
+        document.getElementById('appContainer').style.display='none';
+      }
+    });
+
+    function loadUserPlaylists(){
+      const key = playlists_${currentUID};
+      playlists = JSON.parse(localStorage.getItem(key))|| {"Мой Плейлист":[]};
+      updatePlaylistSelect();
+    }
+    function saveUserPlaylists(){
+      localStorage.setItem(playlists_${currentUID}, JSON.stringify(playlists));
+    }
+
+    // Таймер, игра, фон и мини-игра
+    let score=0; const scoreEl=document.querySelector('#score span');
+    function showMessage(msg, t=2000){ const m=document.getElementById('message');m.textContent=msg; setTimeout(()=>m.textContent='',t);}
+    function updatePlaylistSelect(){
+      const sel=document.getElementById('playlistSelect'); sel.innerHTML='';
+      Object.keys(playlists).forEach(name => { const o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o); });
+      renderSongs();
+    }
+    document.getElementById('createPlBtn').onclick = () => {
+      const v = document.getElementById('newPlaylistInput').value.trim();
+      if(v && !playlists[v]) { playlists[v]=[]; saveUserPlaylists(); updatePlaylistSelect(); showMessage(Создан: ${v}); }
+    };
+    document.getElementById('playlistSelect').onchange = renderSongs;
+    document.getElementById('addSongBtn').onclick = () => {
+      const s = document.getElementById('songInput').value.trim(), pl = document.getElementById('playlistSelect').value;
+      if(s && !playlists[pl].some(x=>x.name===s)){ playlists[pl].push({name:s,url:null}); saveUserPlaylists(); renderSongs(); showMessage(Добавлено: ${s}); }
+    };
+
+    function uploadMP3(){
+      const file=document.getElementById('fileInput').files[0];
+      if(!file||file.type!=='audio/mpeg'){ showMessage('MP3?'); return; }
+      const pl=document.getElementById('playlistSelect').value;
+      const storageRef = ref(storage, songs/${currentUID}/${file.name});
+      const task = uploadBytesResumable(storageRef, file, { contentType: 'audio/mpeg' });
+      task.on('state_changed', s=>showMessage(Загружается: ${Math.floor(s.bytesTransferred/s.totalBytes*100)}%), e=>showMessage('Ошибка'), ()=>{
+        getDownloadURL(task.snapshot.ref).then(url=>{
+          playlists[pl].push({name:file.name.replace(/\.mp3$/i,''),url});
+          saveUserPlaylists(); renderSongs(); showMessage('MP3 загружено');
+        });
+      });
+    }
+    document.getElementById('uploadMp3Btn').onclick=uploadMP3;
+
+    // Диктофон
+    let recorder, chunks=[];
+    document.getElementById('startRec').onclick = async () => {
+      const stream= await navigator.mediaDevices.getUserMedia({audio:true});
+      recorder=new MediaRecorder(stream); recorder.ondataavailable=e=>chunks.push(e.data); recorder.start();
+      document.getElementById('startRec').disabled=true;
+      document.getElementById('stopRec').disabled=false;
+    };
+    document.getElementById('stopRec').onclick = () => {
+      recorder.stop(); document.getElementById('startRec').disabled=false; document.getElementById('stopRec').disabled=true;
+    };
+    document.getElementById('uploadRec').onclick = () => {
+      const blob=new Blob(chunks,{type:'audio/webm'}), fileName=voice_${Date.now()}.webm;
+      const pl=document.getElementById('playlistSelect').value;
+      const storageRef = ref(storage, recordings/${currentUID}/${fileName});
+      const task = uploadBytesResumable(storageRef, blob);
+      task.on('state_changed', s=>showMessage(Запись: ${Math.floor(s.bytesTransferred/s.totalBytes*100)}%), e=>showMessage('Ошибка'), ()=>{
+        getDownloadURL(task.snapshot.ref).then(url=>{
+          playlists[pl].push({name:Recording ${new Date().toLocaleString()},url});
+          saveUserPlaylists(); renderSongs(); showMessage('Запись загружена'); chunks=[];
+        });
+      });
+    };
+
+    let spawnInterval=2000;
+    function createGameNote(){
+      const note=document.createElement('span'); note.className='flame game-note';
+      note.textContent=Math.random()<0.5?'🎵':'🎶';
+      note.style.left=${Math.random()*100}vw;
+      note.style.fontSize=${24+Math.random()*16}px;
+      note.style.color=hsl(${Math.random()*60},100%,70%);
+      note.onclick=()=>{
+        score++; scoreEl.textContent=score;
+        note.remove(); document.getElementById('popSound').play();
+        const boom = document.createElement('span');
+        boom.textContent='💥'; boom.style.position='absolute'; boom.style.left=note.style.left; boom.style.bottom='0';
+        document.body.appendChild(boom);
+        setTimeout(()=>boom.remove(),500);
+      };
+      document.getElementById('bonfire').appendChild(note);
+      setTimeout(()=>note.remove(),5000);
+    }
+    function startGameLoop(){
+      setInterval(createGameNote, spawnInterval);
+      setInterval(()=> { if(spawnInterval>400) spawnInterval-=200; },10000);
+    }
+
+    function renderSongs(){
+      const q=document.getElementById('searchInput').value.toLowerCase();
+      const pl=document.getElementById('playlistSelect').value;
+      const list=playlists[pl]||[]; const songList=document.getElementById('songList');
+      songList.innerHTML='';
+      list.filter(s=>s.name.toLowerCase().includes(q)).forEach((song,i)=>{
+        const li=document.createElement('li');
+        const btn=document.createElement('button'); btn.textContent='▶️';
+        btn.onclick=()=>song.url?new Audio(song.url).play():showMessage('Нет файла');
+        li.appendChild(btn);
+        li.appendChild(document.createTextNode(song.name));
+        const del=document.createElement('span'); del.textContent='✖'; del.className='delete-icon';
+        del.onclick=()=>{ list.splice(i,1); saveUserPlaylists(); renderSongs(); };
+        li.appendChild(del);
+        songList.appendChild(li);
+      });
+    }
+    document.getElementById('searchInput').oninput = renderSongs;
+
+    // Погода
+    const apiKey='YOUR_OPENWEATHER_API_KEY';
+    document.getElementById('getWeatherBtn').onclick = async ()=>{
+      const city=document.getElementById('cityInput').value.trim();
+      const wr=document.getElementById('weatherResults'), wid=document.querySelector('.weather-widget');
+      wr.innerHTML='Загружаю...';
+      try {
+        const resp=await fetch(https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKey}&units=metric);
+        if(!resp.ok) throw new Error('Город не найден');
+        const data=await resp.json();
+        const iconCode=data.weather[0].icon;
+        const iconUrl=https://openweathermap.org/img/wn/${iconCode}@2x.png;
+        wr.innerHTML=`<img src="${iconUrl}" alt=""><div style="margin-left:10px">
+          <div><strong>${data.name}, ${data.sys.country}</strong></div>
+          <div>${data.weather[0].description}</div>
+          <div>Темп: ${data.main.temp}°C (ощущается ${data.main.feels_like}°C)</div>
+          <div>Влажность: ${data.main.humidity}%</div>
+          <div>Ветер: ${data.wind.speed} м/с</div>
+        </div>`;
+        const mainId=data.weather[0].main.toLowerCase();
+        wid.style.background = mainId.includes('clear') ? 'linear-gradient(to right,#f7b733,#fc4a1a)' :
+                             mainId.includes('rain') ? 'linear-gradient(to right,#1f4037,#99f2c8)' :
+                             'linear-gradient(to right,#757f9a,#d7dde8)';
+      } catch(err){
+        wr.textContent=err.message;
+      }
+    };
+
+    function initApp(){
+      renderSongs(); startGameLoop();
+    }
+  </script>
+</body>
+</html>
